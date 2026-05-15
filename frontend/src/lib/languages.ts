@@ -1,0 +1,22 @@
+export const languages = [
+  { code: 'en', name: 'English' },
+  { code: 'ms', name: 'Malay' },
+  { code: 'zh', name: 'Mandarin Chinese' },
+  { code: 'hi', name: 'Hindi' },
+  { code: 'bn', name: 'Bengali' },
+  { code: 'id', name: 'Indonesian' },
+  { code: 'ur', name: 'Urdu' },
+  { code: 'ja', name: 'Japanese' },
+  { code: 'mr', name: 'Marathi' },
+  { code: 'vi', name: 'Vietnamese' },
+  { code: 'te', name: 'Telugu' },
+  { code: 'tr', name: 'Turkish' },
+  { code: 'pa', name: 'Punjabi' },
+  { code: 'tl', name: 'Tagalog' },
+  { code: 'ta', name: 'Tamil' },
+  { code: 'ko', name: 'Korean' },
+  { code: 'jv', name: 'Javanese' },
+  { code: 'th', name: 'Thai' },
+  { code: 'gu', name: 'Gujarati' },
+  { code: 'my', name: 'Burmese' }
+];

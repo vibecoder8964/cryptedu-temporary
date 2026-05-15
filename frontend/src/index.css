@@ -1,0 +1,502 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+/** @custom-variant dark (&:is(.dark *)); */
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: 'Geist Variable', sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  :root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --radius: 0.625rem;
+
+    /* Charts */
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+
+    /* Sidebar */
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+  }
+
+  .dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+  }
+
+  * {
+    border-color: var(--border);
+    outline-color: color-mix(in srgb, var(--ring), transparent 50%);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+  html {
+    font-family: var(--font-sans);
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: float 10s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float 8s ease-in-out infinite 1s;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STUDENT APP DESIGN SYSTEM — Dark Green + Amber + Cream
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── CSS Variables for Student App ───────────────────────────────────────── */
+:root {
+  --font-student: 'Inter', sans-serif;
+  --forest: #1B3A2D;
+  --forest-dark: #122A20;
+  --amber: #E8A838;
+  --amber-light: #FDF3DC;
+  --amber-dark: #D4942A;
+  --cream: #F5F0E8;
+  --student-card: #FFFFFF;
+  --charcoal: #1A1A1A;
+  --student-muted: #6B7280;
+  --on-dark: #F0EDE8;
+  --sage: #8BAF98;
+  --success: #2D7A4F;
+  --success-light: #E6F4ED;
+  --danger: #DC2626;
+  --student-border: #E5E0D8;
+  --sidebar-w: 260px;
+  --header-h: 72px;
+  --radius-card: 16px;
+  --radius-btn: 10px;
+  --radius-input: 10px;
+  --radius-nav: 12px;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-hover: 0 4px 16px rgba(0,0,0,0.10);
+  --shadow-amber: 0 2px 8px rgba(232,168,56,0.3);
+}
+
+/* ── Student App Shell ───────────────────────────────────────────────────── */
+.app-root {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  background-color: var(--cream);
+}
+
+/* ── Student Sidebar ─────────────────────────────────────────────────────── */
+.sidebar {
+  position: fixed;
+  top: 0; left: 0;
+  width: var(--sidebar-w);
+  height: 100vh;
+  background-color: var(--forest);
+  display: flex;
+  flex-direction: column;
+  padding: 24px 16px;
+  z-index: 40;
+  overflow-y: auto;
+}
+
+.sidebar__logo-text {
+  font-family: var(--font-student);
+  font-size: 20px;
+  font-weight: 700;
+  color: #FFFFFF;
+  display: block;
+}
+
+.sidebar__logo-sub {
+  font-family: var(--font-student);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--sage);
+  display: block;
+  margin-top: 2px;
+}
+
+.sidebar__logo {
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  margin-bottom: 32px;
+  flex-shrink: 0;
+}
+
+.sidebar__nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius-nav);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--sage);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+  text-decoration: none;
+  border: none;
+  background: transparent;
+  width: 100%;
+  border-left: 3px solid transparent;
+}
+
+.nav-item:hover { background: rgba(255,255,255,0.08); }
+
+.nav-item--active {
+  background: rgba(255,255,255,0.15);
+  color: #FFFFFF;
+  font-weight: 600;
+  border-left-color: var(--amber);
+}
+
+.nav-item--active .nav-item__icon { color: var(--amber); }
+.nav-item__icon { width: 20px; height: 20px; flex-shrink: 0; color: var(--sage); }
+
+.sidebar__profile {
+  background: rgba(255,255,255,0.08);
+  border-radius: var(--radius-nav);
+  padding: 12px;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.sidebar__avatar {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background-color: var(--success);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 700; color: #FFFFFF;
+  flex-shrink: 0;
+}
+
+.sidebar__profile-name { font-size: 14px; font-weight: 600; color: #FFFFFF; }
+.sidebar__profile-sub { font-size: 12px; color: var(--sage); margin-top: 1px; }
+
+/* ── Student Main Shell ──────────────────────────────────────────────────── */
+.main-shell {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  min-width: 0;
+  width: calc(100vw - var(--sidebar-w));
+  max-width: calc(100vw - var(--sidebar-w));
+  min-height: 100vh;
+  background-color: var(--cream);
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+/* ── Student Header ──────────────────────────────────────────────────────── */
+.app-header {
+  position: sticky;
+  top: 0;
+  height: var(--header-h);
+  background-color: var(--student-card);
+  border-bottom: 1px solid var(--student-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  z-index: 30;
+}
+
+.app-header__title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--charcoal);
+}
+
+/* ── Student Page Content ────────────────────────────────────────────────── */
+.page-content {
+  padding: 32px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+.screen {
+  animation: screen-enter 300ms ease both;
+  min-width: 0;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+/* ── Student Cards ───────────────────────────────────────────────────────── */
+.card {
+  background: var(--student-card);
+  border: 1px solid var(--student-border);
+  border-radius: var(--radius-card);
+  padding: 24px;
+  box-shadow: var(--shadow-card);
+  transition: all 200ms ease;
+}
+
+.card:hover { box-shadow: var(--shadow-hover); }
+
+/* ── Student Buttons ─────────────────────────────────────────────────────── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: var(--amber);
+  color: var(--charcoal);
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: var(--radius-btn);
+  padding: 12px 24px;
+  border: none;
+  cursor: pointer;
+  transition: all 200ms ease;
+  box-shadow: var(--shadow-amber);
+  white-space: nowrap;
+  text-decoration: none;
+  line-height: 1;
+}
+.btn-primary:hover { background-color: var(--amber-dark); }
+.btn-primary:active { transform: scale(0.97); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: transparent;
+  color: var(--amber);
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: var(--radius-btn);
+  border: 2px solid var(--amber);
+  padding: 10px 22px;
+  cursor: pointer;
+  transition: all 200ms ease;
+  white-space: nowrap;
+  text-decoration: none;
+  line-height: 1;
+}
+.btn-secondary:hover { background: var(--amber-light); }
+
+/* ── Student Input Fields ────────────────────────────────────────────────── */
+.input-field {
+  width: 100%;
+  background: var(--student-card);
+  border: 1.5px solid var(--student-border);
+  border-radius: var(--radius-input);
+  padding: 12px 16px;
+  font-family: var(--font-student);
+  font-size: 15px;
+  color: var(--charcoal);
+  outline: none;
+  transition: border-color 200ms ease;
+  line-height: 1.5;
+}
+.input-field::placeholder { color: #9CA3AF; }
+.input-field:focus { border-color: var(--amber); }
+
+/* ── Student Chat Bubbles ────────────────────────────────────────────────── */
+.bubble--student {
+  background: var(--forest);
+  color: var(--on-dark);
+  border-radius: 18px 18px 4px 18px;
+  max-width: 65%; padding: 12px 16px;
+  font-size: 15px; line-height: 1.6;
+  margin-left: auto;
+}
+.bubble--tutor {
+  background: var(--student-card);
+  border: 1px solid var(--student-border);
+  color: var(--charcoal);
+  border-radius: 18px 18px 18px 4px;
+  max-width: 65%; padding: 12px 16px;
+  font-size: 15px; line-height: 1.6;
+  margin-right: auto;
+}
+.bubble--tutor__label { font-size: 12px; font-weight: 600; color: var(--amber); margin-bottom: 4px; }
+
+/* ── Student Typing Indicator ────────────────────────────────────────────── */
+.typing-indicator {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 10px 14px;
+  background: var(--student-card); border: 1px solid var(--student-border);
+  border-radius: 18px 18px 18px 4px;
+}
+.typing-indicator__dot { width: 6px; height: 6px; border-radius: 50%; background: #9CA3AF; }
+.typing-indicator__dot:nth-child(1) { animation: typing-dot 1.2s ease infinite; }
+.typing-indicator__dot:nth-child(2) { animation: typing-dot 1.2s ease 0.2s infinite; }
+.typing-indicator__dot:nth-child(3) { animation: typing-dot 1.2s ease 0.4s infinite; }
+
+/* ── Student Status Dots ─────────────────────────────────────────────────── */
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.status-dot--green { background: var(--success); animation: pulse-dot 2s ease-in-out infinite; }
+.status-dot--amber { background: var(--amber); }
+.status-dot--red { background: var(--danger); }
+
+/* ── Student Progress Bar ────────────────────────────────────────────────── */
+.progress-track { width: 100%; height: 6px; background: var(--student-border); border-radius: 9999px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--amber); border-radius: 9999px; width: 0%; transition: width 600ms ease; }
+
+/* ── Student Badges ──────────────────────────────────────────────────────── */
+.badge--ready {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--success-light); color: var(--success);
+  font-size: 12px; font-weight: 600; border-radius: 9999px; padding: 4px 10px;
+}
+.badge--warning {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(232,168,56,0.15); color: #92650A;
+  font-size: 12px; font-weight: 600; border-radius: 9999px; padding: 4px 10px;
+}
+
+/* ── Student Chips ───────────────────────────────────────────────────────── */
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--student-card); border: 1px solid var(--student-border);
+  border-radius: 9999px; padding: 8px 16px;
+  font-size: 13px; font-weight: 500; color: var(--charcoal);
+  cursor: pointer; transition: all 200ms ease; white-space: nowrap;
+}
+.chip:hover { border-color: var(--amber); color: var(--amber); }
+.chip--active { background: var(--amber); border-color: var(--amber); color: var(--charcoal); }
+
+/* ── Student Bento Grid ──────────────────────────────────────────────────── */
+.bento-grid { display: grid; gap: 24px; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+
+/* ── Student Responsive ──────────────────────────────────────────────────── */
+@media (max-width: 1023px) {
+  :root { --sidebar-w: 220px; }
+  .main-shell { margin-left: 220px; width: calc(100vw - 220px); max-width: calc(100vw - 220px); }
+}
+@media (max-width: 767px) {
+  .sidebar { transform: translateX(-100%); }
+  .main-shell { margin-left: 0; width: 100vw; max-width: 100vw; }
+}
+
+/* ── Student Keyframes ───────────────────────────────────────────────────── */
+@keyframes screen-enter {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.7; }
+}
+@keyframes typing-dot {
+  0%, 80%, 100% { opacity: 0.3; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-4px); }
+}
