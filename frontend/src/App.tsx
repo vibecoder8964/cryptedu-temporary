@@ -99,46 +99,26 @@ function AdminLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [isSignUp, setIsSignUp] = useState(false);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      // Sign in via Cognito (Amplify).
-      const result = await signIn({ username, password });
-      if (!(result.isSignedIn || result.nextStep?.signInStep === "DONE")) {
-        // Cognito returned a non-DONE next step (e.g. CONFIRM_SIGN_UP, MFA).
-        // Surface a clear error rather than silently proceeding.
-        setError(`Sign-in incomplete: ${result.nextStep?.signInStep ?? "unknown step"}`);
-        return;
-      }
-
-      // Pull the freshly-issued ID token from the Amplify session and
-      // exchange it for a backend session cookie. The backend verifies the
-      // token, ensures a `users` row exists keyed by the Cognito email,
-      // and sets the `session_token` cookie that gates every `/api/v1/*`
-      // route. `credentials: 'include'` is required so the Set-Cookie
-      // response header is honoured by the browser.
-      const session = await fetchAuthSession();
-      const idToken = session.tokens?.idToken?.toString();
-      if (!idToken) {
-        setError("Cognito session is missing an ID token.");
-        return;
-      }
-
-      const body: CognitoExchangeRequest = { id_token: idToken };
       const apiBase = import.meta.env.VITE_API_URL ?? "";
-      const exchangeRes = await fetch(`${apiBase}/api/auth/cognito-exchange`, {
+      const endpoint = isSignUp ? "/api/auth/signup" : "/api/auth/login";
+      const res = await fetch(`${apiBase}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(body),
+        body: JSON.stringify({ username, password }),
       });
 
-      if (!exchangeRes.ok) {
-        let detail = `Backend session exchange failed (HTTP ${exchangeRes.status})`;
+      if (!res.ok) {
+        let detail = `${isSignUp ? 'Sign up' : 'Login'} failed (HTTP ${res.status})`;
         try {
-          const data = await exchangeRes.json();
+          const data = await res.json();
           if (data && typeof data.detail === "string") {
             detail = data.detail;
           }
@@ -152,10 +132,7 @@ function AdminLoginPage() {
       localStorage.setItem("cryptedu_role", "admin");
       navigate("/admin");
     } catch (err: any) {
-      // Admin accounts must now be provisioned explicitly via
-      // `/api/admin/create-account`; the previous auto-signup branch
-      // (catching `UserNotFoundException`) has been removed.
-      setError(err?.message || "Login failed");
+      setError(err?.message || `${isSignUp ? 'Sign up' : 'Login'} failed`);
     } finally {
       setLoading(false);
     }
@@ -220,16 +197,25 @@ function AdminLoginPage() {
             disabled={loading}
             className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-sm font-bold text-white bg-gradient-to-r from-[#163e2c] to-emerald-800 hover:from-[#112a1f] hover:to-emerald-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transform transition-all active:scale-[0.98] disabled:opacity-70 mt-4"
           >
-            {loading ? "Signing in..." : "Access Dashboard"}
+            {loading ? "Processing..." : isSignUp ? "Create Account" : "Access Dashboard"}
           </button>
         </form>
 
-        <button
-          onClick={() => navigate("/")}
-          className="mt-6 text-sm font-semibold text-emerald-700 hover:text-emerald-800 transition-colors w-full text-center"
-        >
-          ← Back to role selection
-        </button>
+        <div className="mt-6 flex flex-col space-y-3">
+          <button
+            onClick={() => { setIsSignUp(!isSignUp); setError(""); }}
+            className="text-sm font-semibold text-emerald-700 hover:text-emerald-800 transition-colors w-full text-center"
+          >
+            {isSignUp ? "Already have an account? Sign in" : "Need an account? Sign up"}
+          </button>
+          
+          <button
+            onClick={() => navigate("/")}
+            className="text-sm font-semibold text-gray-500 hover:text-gray-700 transition-colors w-full text-center"
+          >
+            ← Back to role selection
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -245,16 +231,39 @@ function StudentLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [fullName, setFullName] = useState("");
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      await studentLogin(username, password);
+      if (isSignUp) {
+        // Need to import signupUser, wait, it's not imported.
+        // Let's use fetch directly since we didn't import signupUser here?
+        // Actually, we imported studentLogin, we should import signupUser.
+        // Let's just use the imported service or fetch directly. I'll import it above later.
+        // Wait, I can just use the api directly to avoid import issues.
+        const apiBase = import.meta.env.VITE_API_URL ?? "";
+        const res = await fetch(`${apiBase}/api/end-users/signup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ username, password, full_name: fullName }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Sign up failed.");
+        }
+      } else {
+        await studentLogin(username, password);
+      }
       localStorage.setItem("cryptedu_role", "student");
       navigate("/student/home");
     } catch (err: any) {
-      setError(err.message || "Login failed");
+      setError(err.message || `${isSignUp ? 'Sign up' : 'Login'} failed`);
     } finally {
       setLoading(false);
     }
@@ -284,10 +293,24 @@ function StudentLoginPage() {
       {/* Right Panel */}
       <div className="flex-1 flex items-center justify-center bg-[#F5F0E8]">
         <div className="w-full max-w-[420px] px-6 py-8">
-          <h2 className="text-[28px] font-[800] text-[#1A1A1A] mb-2 tracking-tight">Welcome back</h2>
-          <p className="text-[15px] text-[#6B7280] mb-8">Sign in to continue learning</p>
+          <h2 className="text-[28px] font-[800] text-[#1A1A1A] mb-2 tracking-tight">{isSignUp ? "Create an account" : "Welcome back"}</h2>
+          <p className="text-[15px] text-[#6B7280] mb-8">{isSignUp ? "Sign up to start learning" : "Sign in to continue learning"}</p>
 
           <form onSubmit={handleLogin} className="flex flex-col gap-5">
+            {isSignUp && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-semibold text-[#374151]">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full bg-[#ffffff] border border-[rgba(0,0,0,0.15)] rounded-[6px] px-4 py-3 text-[#1A1A1A] outline-none focus:border-[#E8A838] transition-all duration-200"
+                  placeholder="Enter your full name"
+                />
+              </div>
+            )}
+            
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-semibold text-[#374151]">Username</label>
               <input
@@ -319,16 +342,25 @@ function StudentLoginPage() {
               disabled={loading}
               className="w-full h-[52px] bg-[#E8A838] hover:bg-[#D99A2D] active:bg-[#C98A1C] text-white font-semibold rounded-[8px] mt-2 flex items-center justify-center transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? "Processing..." : isSignUp ? "Sign Up" : "Sign In"}
             </button>
           </form>
 
-          <button
-            onClick={() => navigate("/")}
-            className="mt-6 text-sm text-[#6B7280] hover:text-[#1A1A1A] w-full text-center transition-colors"
-          >
-            ← Back to role selection
-          </button>
+          <div className="mt-6 flex flex-col space-y-3">
+            <button
+              onClick={() => { setIsSignUp(!isSignUp); setError(""); }}
+              className="text-sm text-[#E8A838] hover:text-[#C98A1C] w-full text-center font-medium transition-colors"
+            >
+              {isSignUp ? "Already have an account? Sign in" : "Need an account? Sign up"}
+            </button>
+            
+            <button
+              onClick={() => navigate("/")}
+              className="text-sm text-[#6B7280] hover:text-[#1A1A1A] w-full text-center transition-colors"
+            >
+              ← Back to role selection
+            </button>
+          </div>
         </div>
       </div>
     </div>

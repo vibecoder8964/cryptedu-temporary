@@ -34,7 +34,8 @@ const clearSession = () => localStorage.removeItem(SESSION_KEY);
  * the store from the backend right after this resolves.
  */
 export const loginUser = async (username, password) => {
-  const res = await fetch('/api/end-users/login', {
+  const apiBase = import.meta.env.VITE_API_URL ?? '';
+  const res = await fetch(`${apiBase}/api/end-users/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -59,6 +60,31 @@ export const loginUser = async (username, password) => {
   // the backend.
   invalidateLocalStateCache();
 
+  return { isSignedIn: true, user: session };
+};
+
+export const signupUser = async (username, password, fullName) => {
+  const apiBase = import.meta.env.VITE_API_URL ?? '';
+  const res = await fetch(`${apiBase}/api/end-users/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ username, password, full_name: fullName }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Sign up failed.');
+  }
+
+  const data = await res.json();
+  const session = {
+    username: data.user.username,
+    full_name: data.user.full_name || username,
+    role: data.user.role || 'student',
+  };
+  setSession(session);
+  invalidateLocalStateCache();
   return { isSignedIn: true, user: session };
 };
 

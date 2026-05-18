@@ -19,50 +19,25 @@ from config import DB_PATH, DATA_DIR, SUPABASE_ENABLED, ENCRYPTION_KEY
 
 logger = logging.getLogger(__name__)
 
-# ── Fernet key fallback gate (spec task 1.5, Requirement 1.11) ────────────
-# CRYPTEDU_SECRET MUST be set in the environment. If it is missing, config.py
-# would silently derive ENCRYPTION_KEY from a hardcoded fallback string, which:
-#   1. is identical across every deployment that forgets to set it, so the
-#      encrypted credential blobs in the SQLite ``users`` table are not really
-#      protected;
-#   2. would mask any future drift to a per-process random key — every
-#      restart would then produce a different key and previously-saved
-#      AWS, Google, and Lambda credential blobs would become undecryptable,
-#      silently breaking the Video_Analyzer_Pipeline and Drive upload paths.
-# Fail fast and loud at import time so the operator sees the misconfiguration
-# before any credential is ever encrypted with the wrong key.
-if not os.getenv("CRYPTEDU_SECRET"):
-    raise RuntimeError(
-        "CRYPTEDU_SECRET environment variable is required. "
-        "It seeds the Fernet encryption key used to protect stored AWS, "
-        "Google, and Lambda credentials. Without it, blobs encrypted on a "
-        "previous boot cannot be reliably decrypted on this one. Set "
-        "CRYPTEDU_SECRET to a stable, long-lived secret (exported from "
-        "your deployment environment) before starting the backend."
-    )
-
-# ── Fernet Cipher ─────────────────────────────────────────
-# Derive a URL-safe base64 key from the 32-byte ENCRYPTION_KEY
-_fernet_key = base64.urlsafe_b64encode(ENCRYPTION_KEY)
-_cipher = Fernet(_fernet_key)
+# ── Fernet key fallback gate disabled per request ─────────────────────────
+# Fernet encryption has been completely removed from the program.
+# We no longer require the CRYPTEDU_SECRET environment variable to boot.
 
 
 def encrypt_value(plaintext: str) -> str:
-    """Encrypt a string value using Fernet symmetric encryption."""
+    """Encryption disabled per user request."""
     if not plaintext:
         return ""
-    return _cipher.encrypt(plaintext.encode("utf-8")).decode("utf-8")
+    logger.warning("Encryption disabled. Returning plaintext.")
+    return plaintext
 
 
 def decrypt_value(ciphertext: str) -> str:
-    """Decrypt a Fernet-encrypted string."""
+    """Decryption disabled per user request."""
     if not ciphertext:
         return ""
-    try:
-        return _cipher.decrypt(ciphertext.encode("utf-8")).decode("utf-8")
-    except Exception as e:
-        logger.error(f"Decryption failed: {e}")
-        return ""
+    logger.warning("Decryption disabled. Returning plaintext.")
+    return ciphertext
 
 
 def normalize_private_key(key: str) -> str:
@@ -218,6 +193,32 @@ def init_db():
         )
         conn.commit()
         logger.info("Default admin user created.")
+
+    # Seed test@admin.edu.my user
+    test_admin_existing = conn.execute("SELECT id FROM users WHERE username = ?", ("test@admin.edu.my",)).fetchone()
+    if not test_admin_existing:
+        import bcrypt
+        test_pwd_hash = bcrypt.hashpw(b"Test123###", bcrypt.gensalt()).decode('utf-8')
+        conn.execute(
+            """INSERT INTO users (username, password_hash, full_name, role, government_id)
+               VALUES (?, ?, ?, ?, ?)""",
+            ("test@admin.edu.my", test_pwd_hash, "Test Admin", "Regional Moderator", "")
+        )
+        conn.commit()
+        logger.info("test@admin.edu.my user created.")
+
+    # Seed student end user
+    test_student_existing = conn.execute("SELECT id FROM end_user_accounts WHERE username = ?", ("student",)).fetchone()
+    if not test_student_existing:
+        import bcrypt
+        student_pwd_hash = bcrypt.hashpw(b"123456", bcrypt.gensalt()).decode('utf-8')
+        conn.execute(
+            """INSERT INTO end_user_accounts (username, password_hash, full_name, role)
+               VALUES (?, ?, ?, ?)""",
+            ("student", student_pwd_hash, "Test Student", "student")
+        )
+        conn.commit()
+        logger.info("student end-user created.")
         
     try:
         conn.execute("ALTER TABLE users ADD COLUMN google_client_email_enc TEXT DEFAULT ''")
@@ -772,9 +773,28 @@ def update_user_credentials_by_id(
     exam_answers_folder_id: str = "",
 ) -> bool:
     """Update AWS/Google/Lambda credentials by numeric user ID — encrypts before storage."""
+    # Fetch existing to avoid overwriting with empty strings
+    existing = get_user_by_id_decrypted(user_id) or {}
+    
+    aws_access_key = aws_access_key if aws_access_key else existing.get("aws_access_key", "")
+    aws_secret_key = aws_secret_key if aws_secret_key else existing.get("aws_secret_key", "")
+    aws_region = aws_region if aws_region else existing.get("aws_region", "us-east-1")
+    bedrock_role_arn = bedrock_role_arn if bedrock_role_arn else existing.get("bedrock_role_arn", "")
+    s3_training_bucket = s3_training_bucket if s3_training_bucket else existing.get("s3_training_bucket", "cryptedu-training-data")
+    google_client_email = google_client_email if google_client_email else existing.get("google_client_email", "")
+    google_private_key = google_private_key if google_private_key else existing.get("google_private_key", "")
+    google_project_id = google_project_id if google_project_id else existing.get("google_project_id", "")
+    google_drive_folder_id = google_drive_folder_id if google_drive_folder_id else existing.get("google_drive_folder_id", "")
+    lambda_url = lambda_url if lambda_url else existing.get("lambda_url", "")
+    lambda_api_key = lambda_api_key if lambda_api_key else existing.get("lambda_api_key", "")
+    textbooks_folder_id = textbooks_folder_id if textbooks_folder_id else existing.get("textbooks_folder_id", "")
+    exam_questions_folder_id = exam_questions_folder_id if exam_questions_folder_id else existing.get("exam_questions_folder_id", "")
+    exam_answers_folder_id = exam_answers_folder_id if exam_answers_folder_id else existing.get("exam_answers_folder_id", "")
+
     # Normalize private key format before encryption
     if google_private_key:
         google_private_key = normalize_private_key(google_private_key)
+        
     conn = get_conn()
     conn.execute(
         """UPDATE users SET

@@ -254,8 +254,13 @@ def moderate_with_bedrock(transcript: str, aws_creds: dict) -> str:
             ]
         })
 
+        # Use the custom model ID from the DB if available, otherwise fall back to Haiku
+        model_id = aws_creds.get("bedrock_role_arn")
+        if not model_id or not model_id.strip():
+            model_id = BEDROCK_MODEL_ID
+            
         response = bedrock_runtime.invoke_model(
-            modelId=BEDROCK_MODEL_ID,
+            modelId=model_id,
             body=body,
             accept="application/json",
             contentType="application/json"

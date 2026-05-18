@@ -41,17 +41,14 @@ from reportlab.platypus import (
     Table, TableStyle, HRFlowable
 )
 
-app = FastAPI(title="SLM Hub Placement API", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"],
-    allow_methods=["*"], allow_headers=["*"], allow_credentials=True)
+from contextlib import asynccontextmanager
 
 import logging
 _startup_logger = logging.getLogger("cryptedu.startup")
 
-
-@app.on_event("startup")
-def on_startup():
-    """Run all DB migrations and optionally seed users (Requirement 1.3, 1.4).
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Run all DB migrations and optionally seed users (Requirement 1.3, 1.4) during startup lifespan.
 
     ``init_db()`` already runs on ``import engines.database``, so
     migrations are always applied by the time this hook fires.
@@ -88,6 +85,12 @@ def on_startup():
             _startup_logger.info("seed_users completed successfully")
         except Exception as e:
             _startup_logger.error("seed_users failed: %s", e)
+            
+    yield
+
+app = FastAPI(title="SLM Hub Placement API", version="1.0.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origin_regex=".*",
+    allow_methods=["*"], allow_headers=["*"], allow_credentials=True)
 
 
 from engines.auth import (
@@ -114,16 +117,51 @@ def login(req: LoginReq, response: Response):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
     
     token = create_access_token({"sub": str(user["id"])})
+    is_prod = os.environ.get("CRYPTEDU_PRODUCTION", "").lower() == "true"
     response.set_cookie(
         key="session_token", 
         value=token, 
         httponly=True, 
-        secure=False, # Set to True in production with HTTPS
-        samesite="lax",
+        secure=is_prod, # Set to True in production with HTTPS
+        samesite="none" if is_prod else "lax",
         max_age=60 * 24 * 7 * 60
     )
     return {"status": "success", "message": "Logged in"}
 
+class SignupReq(BaseModel):
+    username: str
+    password: str
+
+@app.post("/api/auth/signup")
+def signup(req: SignupReq, response: Response):
+    user = get_user_by_username_with_hash(req.username)
+    if user:
+        raise HTTPException(status_code=400, detail="User already exists")
+
+    from engines.database import get_conn
+    from engines.auth import hash_password
+    conn = get_conn()
+    try:
+        conn.execute(
+            "INSERT INTO users (username, password_hash, full_name, role, government_id) VALUES (?, ?, ?, ?, ?)",
+            (req.username, hash_password(req.password), req.username, "Regional Moderator", "")
+        )
+        conn.commit()
+        user = get_user_by_username_with_hash(req.username)
+    finally:
+        conn.close()
+
+    token = create_access_token({"sub": str(user["id"])})
+    is_prod = os.environ.get("CRYPTEDU_PRODUCTION", "").lower() == "true"
+    response.set_cookie(
+        key="session_token", 
+        value=token, 
+        httponly=True, 
+        secure=is_prod,
+        samesite="none" if is_prod else "lax",
+        max_age=60 * 24 * 7 * 60
+    )
+    return {"status": "success", "message": "Account created and logged in"}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Cognito → backend session exchange (spec task 2.3)
@@ -305,112 +343,24 @@ def admin_create_account(
             ),
         )
 
-    # ── Cognito provisioning ────────────────────────────────────────────
-    # Load the *calling* admin's AWS credentials per-request so the
-    # Credential_Belongs_To_Logged_In_User_Invariant holds: this route
-    # never falls back to env vars or a shared service principal
-    # (Requirement 1.12, Property 6).
-    from engines.database import get_user_aws_credentials_by_id
-
-    aws_creds = get_user_aws_credentials_by_id(user_id)
-
-    if not aws_creds.get("aws_access_key") or not aws_creds.get("aws_secret_key"):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "AWS credentials not configured. Save your AWS keys in "
-                "Admin Profile before creating accounts."
-            ),
-        )
-
-    if not config.COGNITO_USER_POOL_ID:
-        # Misconfigured deployment — fail closed rather than calling
-        # Cognito with an empty pool id (which would surface a confusing
-        # boto3 ParamValidationError).
-        raise HTTPException(
-            status_code=500,
-            detail="Cognito User Pool is not configured on the server.",
-        )
-
-    region = aws_creds.get("aws_region") or config.COGNITO_REGION or "us-east-1"
-
-    try:
-        cognito = boto3.client(
-            "cognito-idp",
-            aws_access_key_id=aws_creds["aws_access_key"],
-            aws_secret_access_key=aws_creds["aws_secret_key"],
-            region_name=region,
-        )
-
-        # admin_create_user with SUPPRESS skips the welcome email so the
-        # admin-supplied password (set in the next call) is the only
-        # credential the new user ever sees. Setting the email_verified
-        # attribute to "true" prevents Cognito from later forcing the new
-        # admin through an email-verification challenge.
-        cognito.admin_create_user(
-            UserPoolId=config.COGNITO_USER_POOL_ID,
-            Username=username,
-            UserAttributes=[
-                {"Name": "email", "Value": username},
-                {"Name": "email_verified", "Value": "true"},
-            ],
-            MessageAction="SUPPRESS",
-            TemporaryPassword=password,
-        )
-
-        # Replace the temporary password with the admin-supplied one and
-        # mark it permanent so the new admin can log in immediately
-        # without the FORCE_CHANGE_PASSWORD challenge.
-        cognito.admin_set_user_password(
-            UserPoolId=config.COGNITO_USER_POOL_ID,
-            Username=username,
-            Password=password,
-            Permanent=True,
-        )
-    except ClientError as e:
-        # Surface the Cognito error verbatim so the admin sees the real
-        # cause (UsernameExistsException, InvalidPasswordException, IAM
-        # AccessDenied, throttling, …) — but redact any AWS secret that
-        # might be embedded in the error string before it leaves the
-        # process. No ``users`` row is inserted on this path.
-        message = (
-            e.response.get("Error", {}).get("Message")
-            or str(e)
-        )
-        raise HTTPException(
-            status_code=400,
-            detail=_redact_aws_secrets(message, aws_creds),
-        )
-    except BotoCoreError as e:
-        # Network / signing / endpoint issues from botocore proper. Same
-        # redaction policy as ClientError.
-        raise HTTPException(
-            status_code=400,
-            detail=_redact_aws_secrets(str(e), aws_creds),
-        )
-    except HTTPException:
-        # Re-raise our own 4xx without rewrapping (e.g. a future inner
-        # validation that raises HTTPException directly).
-        raise
-    except Exception as e:  # pragma: no cover — last-resort safety net
-        # Anything else (programmer error, unexpected library exception)
-        # collapses to a sanitized 500 — never to a 200, so callers can
-        # rely on success meaning both Cognito calls succeeded.
-        raise HTTPException(
-            status_code=500,
-            detail=_redact_aws_secrets(
-                f"Admin account creation failed: {e}", aws_creds
-            ),
-        )
-
     # ── Backend-side row provisioning ───────────────────────────────────
-    # Both Cognito calls succeeded — now ensure the SQLite ``users`` row
-    # exists so Per_User_Credentials can be stored against this admin
-    # (Requirement 1.13). ``ensure_admin_row`` uses ``INSERT OR IGNORE``
-    # so re-running this route for an already-provisioned email is a
-    # no-op on the SQL side; Cognito would already have rejected the
-    # second attempt with UsernameExistsException above.
-    new_user_id = ensure_admin_row(username)
+    # Skip Cognito entirely. Provision strictly in SQLite.
+    from engines.database import get_conn
+    from engines.auth import hash_password
+
+    conn = get_conn()
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO users (username, password_hash, full_name, role, government_id) VALUES (?, ?, ?, ?, ?)",
+            (username, hash_password(password), username, "Regional Moderator", "")
+        )
+        conn.commit()
+        row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=500, detail="Failed to create user row.")
+        new_user_id = int(row["id"])
+    finally:
+        conn.close()
 
     return {
         "ok": True,
@@ -1008,6 +958,10 @@ async def confirm_upload(
         return {"status": "success", "message": "Video uploaded to AWS S3."}
     except HTTPException:
         raise
+    except ValueError as e:
+        if "missing" in str(e).lower():
+            raise HTTPException(400, detail=_redact(str(e)))
+        raise HTTPException(500, detail=_redact(f"S3 configuration error: {str(e)}"))
     except Exception as e:
         raise HTTPException(500, detail=_redact(f"S3 video write failed: {str(e)}"))
     finally:
@@ -1480,12 +1434,59 @@ async def end_user_login(req: LoginReq, response: Response):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
 
     token = create_access_token({"sub": str(user["id"])})
+    is_prod = os.environ.get("CRYPTEDU_PRODUCTION", "").lower() == "true"
     response.set_cookie(
         key="session_token",
         value=token,
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
-        samesite="lax",
+        secure=is_prod,  # Set to True in production with HTTPS
+        samesite="none" if is_prod else "lax",
+        max_age=60 * 24 * 7 * 60,
+    )
+    return {
+        "status": "success",
+        "user": {
+            "username": user["username"],
+            "full_name": user.get("full_name", ""),
+            "role": user.get("role", "student")
+        }
+    }
+
+
+class EndUserSignupReq(BaseModel):
+    username: str
+    password: str
+    full_name: str = ""
+
+@app.post("/api/end-users/signup")
+async def end_user_signup(req: EndUserSignupReq, response: Response):
+    from engines.database import get_end_user_by_username, get_conn
+    from engines.auth import verify_password, hash_password, create_access_token
+
+    user = get_end_user_by_username(req.username)
+    if user:
+        raise HTTPException(status_code=400, detail="User already exists")
+
+    conn = get_conn()
+    try:
+        full_name = req.full_name if req.full_name else req.username
+        conn.execute(
+            "INSERT INTO end_user_accounts (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)",
+            (req.username, hash_password(req.password), full_name, "student")
+        )
+        conn.commit()
+        user = get_end_user_by_username(req.username)
+    finally:
+        conn.close()
+
+    token = create_access_token({"sub": str(user["id"])})
+    is_prod = os.environ.get("CRYPTEDU_PRODUCTION", "").lower() == "true"
+    response.set_cookie(
+        key="session_token",
+        value=token,
+        httponly=True,
+        secure=is_prod,
+        samesite="none" if is_prod else "lax",
         max_age=60 * 24 * 7 * 60,
     )
     return {
@@ -1968,6 +1969,53 @@ class AIQuizRequest(BaseModel):
     topic_scope: str
     format: Optional[AIQuizFormat] = None
 
+def get_fallback_aws_credentials():
+    from engines.database import get_conn, get_user_aws_credentials_by_id
+    conn = get_conn()
+    # As requested by constraints, ONLY use credentials from test@admin.edu.my for bedrock fallback
+    row = conn.execute("SELECT id FROM users WHERE username = ?", ("test@admin.edu.my",)).fetchone()
+    conn.close()
+    if row:
+        return get_user_aws_credentials_by_id(row["id"])
+    return None
+
+def invoke_bedrock_fallback(system_prompt: str, user_messages: list, max_tokens: int = 1024):
+    from engines.aws_pipeline import _get_bedrock_client, BEDROCK_MODEL_ID
+    creds = get_fallback_aws_credentials()
+    if not creds:
+        raise ValueError("No AWS credentials configured in admin profile for Bedrock fallback.")
+    client = _get_bedrock_client(creds)
+    # Format messages for Claude 3
+    # user_messages might contain role 'user' and 'assistant'
+    formatted_messages = []
+    for m in user_messages:
+        if m.get("role") in ["user", "assistant"]:
+            formatted_messages.append({"role": m["role"], "content": m["content"]})
+    
+    body = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": max_tokens,
+        "temperature": 0.1,
+        "system": system_prompt,
+        "messages": formatted_messages
+    }
+    import json
+    model_id = creds.get("bedrock_role_arn")
+    if not model_id or not model_id.strip():
+        model_id = BEDROCK_MODEL_ID
+
+    response = client.invoke_model(
+        modelId=model_id,
+        body=json.dumps(body),
+        accept="application/json",
+        contentType="application/json"
+    )
+    response_body = json.loads(response.get("body").read())
+    content = response_body.get("content", [])
+    if content:
+        return content[0].get("text", "")
+    return ""
+
 @app.post("/api/ai/chat")
 async def ai_chat(req: AIChatRequest):
     """
@@ -2017,11 +2065,28 @@ async def ai_chat(req: AIChatRequest):
     except http_requests.exceptions.Timeout:
         return _ai_error(504, "AI_TIMEOUT", "Local_AI_Tutor timed out after 60s")
     except http_requests.exceptions.ConnectionError:
-        return _ai_error(
-            503,
-            "AI_UNREACHABLE",
-            "Local_AI_Tutor service unavailable: connection refused",
-        )
+        # Fallback to AWS Bedrock
+        try:
+            fallback_text = invoke_bedrock_fallback(system_prompt, safe_messages)
+            body = {
+                "message": {
+                    "role": "assistant",
+                    "content": fallback_text
+                }
+            }
+            # Step 6 — strip markdown / formatting characters from the assistant
+            msg = body.get("message")
+            if isinstance(msg, dict) and isinstance(msg.get("content"), str):
+                msg["content"] = _strip_markdown_formatting(msg["content"])
+            return body
+        except Exception as fallback_e:
+            import logging
+            logging.getLogger(__name__).error(f"Bedrock fallback failed: {fallback_e}")
+            return _ai_error(
+                503,
+                "AI_UNREACHABLE",
+                "Local_AI_Tutor service unavailable and Bedrock fallback failed.",
+            )
 
     if resp.status_code != 200:
         # Body capped at 200 chars per design table to avoid leaking
@@ -2078,7 +2143,19 @@ Essay: {req.essay_text}"""
             raise HTTPException(502, f"Ollama returned {resp.status_code}")
         return resp.json()
     except http_requests.exceptions.ConnectionError:
-        raise HTTPException(503, "AI service unavailable. Ensure Ollama is running on the server.")
+        # Fallback to AWS Bedrock
+        try:
+            fallback_text = invoke_bedrock_fallback("", [{"role": "user", "content": grading_prompt}], max_tokens=1024)
+            return {
+                "message": {
+                    "role": "assistant",
+                    "content": fallback_text
+                }
+            }
+        except Exception as fallback_e:
+            import logging
+            logging.getLogger(__name__).error(f"Bedrock fallback failed: {fallback_e}")
+            raise HTTPException(503, "AI service unavailable and Bedrock fallback failed.")
     except http_requests.exceptions.Timeout:
         raise HTTPException(504, "AI service timed out.")
 
@@ -2184,11 +2261,30 @@ async def ai_generate_quiz(req: AIQuizRequest):
     except http_requests.exceptions.Timeout:
         return _ai_error(504, "AI_TIMEOUT", "Local_AI_Tutor timed out after 60s")
     except http_requests.exceptions.ConnectionError:
-        return _ai_error(
-            503,
-            "AI_UNREACHABLE",
-            "Local_AI_Tutor service unavailable: connection refused",
-        )
+        # Fallback to AWS Bedrock
+        try:
+            fallback_text = invoke_bedrock_fallback(system_prompt, [{"role": "user", "content": user_prompt}], max_tokens=1024)
+            # Step 5 — parse fallback text
+            items = _parse_quiz_items(fallback_text)
+            cleaned: List[dict] = []
+            for it in items:
+                cleaned_item: dict = {"type": it["type"]}
+                cleaned_item["question"] = _strip_markdown_formatting(it.get("question", ""))
+                if it["type"] == "mcq":
+                    cleaned_item["options"] = [
+                        _strip_markdown_formatting(o) for o in it.get("options", [])
+                    ]
+                    cleaned_item["correct_index"] = it.get("correct_index", 0)
+                cleaned.append(cleaned_item)
+            return {"questions": cleaned}
+        except Exception as fallback_e:
+            import logging
+            logging.getLogger(__name__).error(f"Bedrock fallback failed: {fallback_e}")
+            return _ai_error(
+                503,
+                "AI_UNREACHABLE",
+                "Local_AI_Tutor service unavailable and Bedrock fallback failed.",
+            )
 
     if resp.status_code != 200:
         return _ai_error(
