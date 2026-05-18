@@ -16,18 +16,45 @@ WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL", "base")
 
 # ── Database ────────────────────────────────────────────────
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-DB_PATH = os.path.join(DATA_DIR, "cryptedu.db")
+DB_PATH = os.getenv("DB_PATH", os.path.join(DATA_DIR, "cryptedu.db"))
 
 # ── Supabase (optional cloud sync) ──────────────────────────
 SUPABASE_ENABLED = os.getenv("CRYPTEDU_SUPABASE", "false").lower() == "true"
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
+# ── AWS Cognito (Admin_App identity) ────────────────────────
+# Spec task 2.1 — verify_cognito_id_token verifies admin ID tokens issued by
+# this User Pool. Region/Pool/App Client are read from environment variables
+# in production and fall back to the values baked into
+# ``frontend/src/aws-config.ts`` so a fresh local checkout works without
+# additional configuration. The User Pool ID format is "<region>_<suffix>",
+# so an explicit COGNITO_REGION override is supported but unnecessary.
+COGNITO_USER_POOL_ID = os.getenv(
+    "COGNITO_USER_POOL_ID", "ap-southeast-5_KI27lU59V"
+)
+COGNITO_APP_CLIENT_ID = os.getenv(
+    "COGNITO_APP_CLIENT_ID", "3igvjqrogfepkabl711u2tog3t"
+)
+# Derive the region from the User Pool ID prefix (everything before the
+# first underscore) when COGNITO_REGION is not explicitly set, so that an
+# operator who only configures COGNITO_USER_POOL_ID still gets a coherent
+# JWKS URL and `iss` claim.
+COGNITO_REGION = os.getenv(
+    "COGNITO_REGION",
+    COGNITO_USER_POOL_ID.split("_", 1)[0] if "_" in COGNITO_USER_POOL_ID else "",
+)
+
 # ── AWS Bedrock ─────────────────────────────────────────────
+# Spec task 1.3 — AWS credentials are loaded per-request from the encrypted
+# columns of the calling admin's `users` row via
+# `engines.database.get_user_aws_credentials_by_id`. The previous global
+# `AWS_REGION` / `AWS_ACCESS_KEY` / `AWS_SECRET_KEY` constants read from
+# `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` environment
+# variables and were a violation of Requirement 1.11 / Property 6 (a single
+# admin's keys would be visible to every other admin on the same process).
+# They are intentionally removed; do not re-introduce them.
 BEDROCK_ENABLED = os.getenv("CRYPTEDU_BEDROCK", "true").lower() == "true"
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
-AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY_ID", "")
-AWS_SECRET_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")
 BEDROCK_BASE_MODEL = os.getenv("BEDROCK_BASE_MODEL", "amazon.titan-text-express-v1")
 
 # ── Encryption ──────────────────────────────────────────────

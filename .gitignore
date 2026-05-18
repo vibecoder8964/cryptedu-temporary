@@ -20,3 +20,19 @@ Thumbs.db
 # Lambda package
 backend/package/
 backend/lambda.zip
+backend/lambda_function.zip
+
+# Python Virtual Environments
+backend/venv/
+backend/.venv/
+backend/env/
+.venv/
+venv/
+
+# AI Notebook outputs & caches
+.ipynb_checkpoints/
+.chroma/
+
+# Logs
+frontend/npm-debug.log*
+*.log

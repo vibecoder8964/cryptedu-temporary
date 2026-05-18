@@ -39,6 +39,10 @@ const useAppStore = create(
       currentLesson:    null,
       setCurrentLesson: (lesson) => set({ currentLesson: lesson }),
 
+      // Active video transcript (Topic_Scope) — set by LessonPlayerScreen on mount
+      currentVideoTranscript: null,
+      setCurrentVideoTranscript: (transcript) => set({ currentVideoTranscript: transcript }),
+
       // { [lessonId]: 0–100 }
       progress: {},
       setProgress: (lessonId, pct) =>

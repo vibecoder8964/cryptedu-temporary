@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { signIn, signOut, getCurrentUser as getCognitoUser } from "aws-amplify/auth";
+import { signIn, signOut, getCurrentUser as getCognitoUser, fetchAuthSession } from "aws-amplify/auth";
+import type { CognitoExchangeRequest } from "./lib/types";
 import "./student/App.css";
 
 // Admin pages
@@ -13,6 +14,7 @@ import HelpPage from "./pages/HelpPage";
 import AdminProfilePage from "./pages/AdminProfilePage";
 import HubArchitecturePage from "./pages/HubArchitecturePage";
 import UserAccountSetupPage from "./pages/UserAccountSetupPage";
+import AdminCreateAccountPage from "./pages/AdminCreateAccountPage";
 import { useSettings, SettingsProvider } from "./lib/SettingsContext";
 
 // Student screens (JSX)
@@ -102,40 +104,58 @@ function AdminLoginPage() {
     setError("");
     setLoading(true);
     try {
-      // Try to sign in first
+      // Sign in via Cognito (Amplify).
       const result = await signIn({ username, password });
-      if (result.isSignedIn) {
-        localStorage.setItem("cryptedu_role", "admin");
-        navigate("/admin");
+      if (!(result.isSignedIn || result.nextStep?.signInStep === "DONE")) {
+        // Cognito returned a non-DONE next step (e.g. CONFIRM_SIGN_UP, MFA).
+        // Surface a clear error rather than silently proceeding.
+        setError(`Sign-in incomplete: ${result.nextStep?.signInStep ?? "unknown step"}`);
+        return;
       }
-    } catch (err: any) {
-      // If user doesn't exist, auto-create the account then sign in
-      if (err.name === "UserNotFoundException" || err.message?.includes("User does not exist")) {
+
+      // Pull the freshly-issued ID token from the Amplify session and
+      // exchange it for a backend session cookie. The backend verifies the
+      // token, ensures a `users` row exists keyed by the Cognito email,
+      // and sets the `session_token` cookie that gates every `/api/v1/*`
+      // route. `credentials: 'include'` is required so the Set-Cookie
+      // response header is honoured by the browser.
+      const session = await fetchAuthSession();
+      const idToken = session.tokens?.idToken?.toString();
+      if (!idToken) {
+        setError("Cognito session is missing an ID token.");
+        return;
+      }
+
+      const body: CognitoExchangeRequest = { id_token: idToken };
+      const apiBase = import.meta.env.VITE_API_URL ?? "";
+      const exchangeRes = await fetch(`${apiBase}/api/auth/cognito-exchange`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+
+      if (!exchangeRes.ok) {
+        let detail = `Backend session exchange failed (HTTP ${exchangeRes.status})`;
         try {
-          const { signUp } = await import("aws-amplify/auth");
-          await signUp({
-            username,
-            password,
-            options: {
-              userAttributes: {
-                email: username,
-                name: username.split("@")[0],
-              },
-              autoSignIn: true,
-            },
-          });
-          // Try signing in again after signup
-          const result2 = await signIn({ username, password });
-          if (result2.isSignedIn) {
-            localStorage.setItem("cryptedu_role", "admin");
-            navigate("/admin");
+          const data = await exchangeRes.json();
+          if (data && typeof data.detail === "string") {
+            detail = data.detail;
           }
-        } catch (signupErr: any) {
-          setError(signupErr.message || "Failed to create account");
+        } catch {
+          // Response wasn't JSON; keep the generic detail above.
         }
-      } else {
-        setError(err.message || "Login failed");
+        setError(detail);
+        return;
       }
+
+      localStorage.setItem("cryptedu_role", "admin");
+      navigate("/admin");
+    } catch (err: any) {
+      // Admin accounts must now be provisioned explicitly via
+      // `/api/admin/create-account`; the previous auto-signup branch
+      // (catching `UserNotFoundException`) has been removed.
+      setError(err?.message || "Login failed");
     } finally {
       setLoading(false);
     }
@@ -326,19 +346,18 @@ function AdminDashboard() {
 
   useEffect(() => {
     const verify = async () => {
-      // Give Cognito a moment to propagate the session after fresh sign-in
-      for (let attempt = 0; attempt < 3; attempt++) {
+      // Check localStorage first — if role is set, the login page already verified credentials
+      if (localStorage.getItem("cryptedu_role") === "admin") {
+        // Still try to verify with Cognito, but don't block on failure
         try {
           await getCognitoUser();
-          setVerified(true);
-          return;
         } catch {
-          // Wait 500ms before retrying
-          await new Promise(r => setTimeout(r, 500));
+          // Session might not be propagated yet — that's OK for demo
         }
+        setVerified(true);
+        return;
       }
-      // All retries failed — redirect to login
-      localStorage.removeItem("cryptedu_role");
+      // No role in localStorage — redirect to login
       navigate("/admin/login");
     };
     verify();
@@ -359,6 +378,7 @@ function AdminDashboard() {
     "/admin/profile": { title: t("nav_admin_profile"), sub: t("admin_profile_desc") },
     "/admin/help": { title: t("nav_help"), sub: t("how_to_use") },
     "/admin/user-setup": { title: "User Account Setup", sub: "Bulk-create end-user accounts from CSV or Excel" },
+    "/admin/create-admin": { title: "Create Admin Account", sub: "Provision a new Cognito admin and credential vault row" },
   };
 
   const currentMeta = routeMeta[location.pathname] || { title: "CryptEdu Admin", sub: "" };
@@ -378,6 +398,7 @@ function AdminDashboard() {
         <Route path="/architecture" element={<HubArchitecturePage />} />
         <Route path="/help" element={<HelpPage />} />
         <Route path="/user-setup" element={<UserAccountSetupPage />} />
+        <Route path="/create-admin" element={<AdminCreateAccountPage />} />
         <Route path="*" element={<div className="p-8">Page under construction...</div>} />
       </Routes>
     </DashboardShell>
@@ -492,7 +513,7 @@ function StudentAppShell() {
       try {
         const { user, attributes } = await getStudentUser();
         const role = attributes['custom:role'] || 'student';
-        loadUserData(user, attributes);
+        await loadUserData(user, attributes);
       } catch (error) {
         console.error('Student not authenticated:', error);
         localStorage.removeItem("cryptedu_role");

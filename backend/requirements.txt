@@ -13,12 +13,6 @@ requests
 openai-whisper
 boto3
 supabase
-PyMuPDF
-pytesseract
-Pillow
 cryptography
-argostranslate
-deep_translator
 openpyxl==3.1.5
-
 mangum

@@ -7,6 +7,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { lessons } from '../data/mockData';
 import useAppStore from '../store/appStore';
 
+const TRANSCRIPT_TIMEOUT_MS = 10_000; // 10 s client-side timeout (Req 2.4)
+
 const SUBJECT_STYLE = {
   Science:          { bg: '#E6F4ED', color: '#2D7A4F', emoji: '🔬' },
   Mathematics:      { bg: '#FDF3DC', color: '#E8A838', emoji: '📐' },
@@ -26,7 +28,7 @@ const VIDEO_MAP = {
 export default function LessonPlayerScreen() {
   const { id }      = useParams();
   const navigate    = useNavigate();
-  const { setCurrentLesson, setProgress, getProgress } = useAppStore();
+  const { setCurrentLesson, setProgress, getProgress, setCurrentVideoTranscript } = useAppStore();
 
   const lesson      = lessons.find(l => l.id === id);
   const fillRef     = useRef(null);
@@ -37,6 +39,11 @@ export default function LessonPlayerScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
   const style       = SUBJECT_STYLE[lesson?.subject] ?? { bg: '#F3F4F6', color: '#6B7280', emoji: '📚' };
 
+  // Transcript / Topic_Scope state (Req 2.4, 2.5)
+  const [currentVideoTranscript, setLocalTranscript] = useState(null);
+  const [topicScopeError, setTopicScopeError]         = useState(false);
+  const [transcriptLoading, setTranscriptLoading]     = useState(false);
+
   // Reset playing state when lesson changes
   useEffect(() => {
     setIsPlaying(false);
@@ -45,6 +52,46 @@ export default function LessonPlayerScreen() {
   useEffect(() => {
     if (lesson) setCurrentLesson(lesson);
   }, [lesson]);
+
+  // Fetch transcript on mount / lesson change (Req 2.4)
+  useEffect(() => {
+    if (!lesson) return;
+
+    let cancelled = false;
+    setLocalTranscript(null);
+    setTopicScopeError(false);
+    setTranscriptLoading(true);
+
+    const apiBase = import.meta.env.VITE_API_URL ?? '';
+    const url     = `${apiBase}/api/videos/${encodeURIComponent(lesson.id)}/transcript`;
+
+    fetch(url, {
+      credentials: 'include',
+      signal: AbortSignal.timeout(TRANSCRIPT_TIMEOUT_MS),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        const transcript = data.transcription_paragraph ?? null;
+        setLocalTranscript(transcript);
+        setCurrentVideoTranscript(transcript); // sync to Zustand store
+        setTopicScopeError(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLocalTranscript(null);
+        setCurrentVideoTranscript(null);
+        setTopicScopeError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setTranscriptLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [lesson?.id]);
 
   // Animate progress bar
   useEffect(() => {
@@ -170,11 +217,51 @@ export default function LessonPlayerScreen() {
           </div>
         </div>
 
-        {/* Action */}
-        <div style={{ display: 'flex', gap: 12 }}>
-          <button className="btn-primary" style={{ flex: 1 }} onClick={() => navigate('/tutor')}>
-            💬 Ask Local AI Tutor
-          </button>
+        {/* Transcript loading indicator */}
+        {transcriptLoading && (
+          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#6B7280', textAlign: 'center', marginBottom: 12 }}>
+            Loading lesson transcript…
+          </p>
+        )}
+
+        {/* Transcript error message (Req 2.5) */}
+        {topicScopeError && (
+          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 12, padding: '12px 16px', marginBottom: 16 }}>
+            <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#DC2626', margin: 0 }}>
+              ⚠️ Could not load the video transcript. The AI Tutor and Quiz are unavailable for this lesson until the transcript is available.
+            </p>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 12 }}>
+            {/* Ask AI Tutor CTA — disabled when topicScopeError (Req 2.5) */}
+            <button
+              className="btn-primary"
+              style={{ flex: 1, opacity: topicScopeError ? 0.45 : 1, cursor: topicScopeError ? 'not-allowed' : 'pointer' }}
+              disabled={topicScopeError}
+              onClick={() => { if (!topicScopeError) navigate('/tutor'); }}
+            >
+              💬 Ask Local AI Tutor
+            </button>
+
+            {/* Take Quiz CTA — disabled when topicScopeError (Req 2.5) */}
+            <button
+              className="btn-primary"
+              style={{ flex: 1, opacity: topicScopeError ? 0.45 : 1, cursor: topicScopeError ? 'not-allowed' : 'pointer' }}
+              disabled={topicScopeError}
+              onClick={() => { if (!topicScopeError) navigate('/quiz'); }}
+            >
+              📝 Take Quiz
+            </button>
+          </div>
+
+          {topicScopeError && (
+            <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#DC2626', textAlign: 'center', margin: 0 }}>
+              AI Tutor and Quiz are disabled because the transcript could not be loaded.
+            </p>
+          )}
         </div>
 
       </div>

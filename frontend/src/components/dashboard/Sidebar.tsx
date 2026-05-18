@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Network, BookOpen, Bot, MapPin, User, HelpCircle, Server, Search, Users, LogOut } from "lucide-react";
+import { Network, BookOpen, Bot, MapPin, User, HelpCircle, Server, Search, Users, ShieldPlus, LogOut } from "lucide-react";
 import { signOut } from "aws-amplify/auth";
 import { useSettings } from "../../lib/SettingsContext";
 import logo from "../../assets/Project_logo.png";
@@ -18,6 +18,7 @@ export default function Sidebar() {
     { href: "/admin/hub-placement", icon: MapPin, label: t("nav_hub_placement"), sub: "(Map)" },
     { href: "/admin/architecture", icon: Server, label: t("nav_hub_architecture"), sub: null },
     { href: "/admin/user-setup", icon: Users, label: "User Account Setup", sub: null },
+    { href: "/admin/create-admin", icon: ShieldPlus, label: "Create Admin Account", sub: null },
     { href: "/admin/profile", icon: User, label: t("nav_admin_profile"), sub: null },
     { href: "/admin/help", icon: HelpCircle, label: t("nav_help"), sub: null },
   ];

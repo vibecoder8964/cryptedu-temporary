@@ -195,7 +195,7 @@ export default function ReadyPage({ textbooks, examPairs, onBack, onReset }: Pro
           <p className="text-[16px] text-gray-600 mb-4">
             Download the notebook template below, then open Google Colab and upload it. Configure the GPU runtime and run all cells.
           </p>
-          <div className="flex gap-4 items-center mb-4">
+          <div className="flex gap-4 items-center mb-4 flex-wrap">
             <a
               href="/notebook.ipynb"
               download
@@ -203,6 +203,27 @@ export default function ReadyPage({ textbooks, examPairs, onBack, onReset }: Pro
             >
               ⬇ 1. Download notebook.ipynb
             </a>
+            <button
+              onClick={() => {
+                fetch('/api/v1/training/notebook', { credentials: 'include' })
+                  .then(res => {
+                    if (!res.ok) throw new Error('Notebook not found');
+                    return res.blob();
+                  })
+                  .then(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'notebook.ipynb';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  })
+                  .catch(err => alert('Download failed: ' + err.message));
+              }}
+              className="px-6 py-3 rounded-xl text-[18px] font-bold bg-gray-100 text-gray-600 border border-gray-300 hover:bg-gray-200 transition-colors"
+            >
+              ⬇ Download via API
+            </button>
             <a
               href="https://colab.research.google.com/"
               target="_blank"
@@ -211,6 +232,15 @@ export default function ReadyPage({ textbooks, examPairs, onBack, onReset }: Pro
             >
               🚀 2. Open Google Colab
             </a>
+          </div>
+          {/* Fine-tuning notice (Requirement 4.8) */}
+          <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm mb-4">
+            <p className="font-bold mb-2">📋 Fine-tuning runs in Google Colab</p>
+            <ol className="list-decimal pl-5 space-y-1">
+              <li>Open <code>notebook.ipynb</code> in Colab</li>
+              <li>Mount your Google Drive when prompted</li>
+              <li>Run all cells in order — the notebook handles everything automatically</li>
+            </ol>
           </div>
           <div className="text-sm text-gray-500 italic mt-2 bg-blue-50 p-4 rounded-lg border border-blue-100">
             <p className="font-bold text-blue-800 mb-2">{t('how_to_configure_colab')}</p>

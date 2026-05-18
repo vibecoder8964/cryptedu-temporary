@@ -22,14 +22,18 @@ export default function AdminProfilePage() {
     bedrockRoleArn: "",
     s3TrainingBucket: "cryptedu-training-data",
     lambdaUrl: "",
-    lambdaApiKey: ""
+    lambdaApiKey: "",
+    useLambdaProxy: false
   });
 
   const [googleConfig, setGoogleConfig] = useState({
     clientEmail: "",
     privateKey: "",
     projectId: "",
-    driveFolderId: ""
+    driveFolderId: "",
+    textbooksFolderId: "",
+    examQuestionsFolderId: "",
+    examAnswersFolderId: ""
   });
 
   const [credsMasked, setCredsMasked] = useState({
@@ -59,11 +63,15 @@ export default function AdminProfilePage() {
             region: data.aws_region || "us-east-1",
             s3TrainingBucket: data.s3_training_bucket || "cryptedu-training-data",
             lambdaUrl: data.lambda_url || "",
+            useLambdaProxy: !!data.use_lambda_proxy,
           }));
           setGoogleConfig(prev => ({
             ...prev,
             projectId: data.google_project_id || "",
-            driveFolderId: data.google_drive_folder_id || ""
+            driveFolderId: data.google_drive_folder_id || "",
+            textbooksFolderId: data.textbooks_folder_id || "",
+            examQuestionsFolderId: data.exam_questions_folder_id || "",
+            examAnswersFolderId: data.exam_answers_folder_id || ""
           }));
           setCredsMasked({
             accessKeyMasked: data.aws_access_key_masked || "",
@@ -116,6 +124,10 @@ export default function AdminProfilePage() {
         google_drive_folder_id: googleConfig.driveFolderId,
         lambda_url: awsConfig.lambdaUrl,
         lambda_api_key: awsConfig.lambdaApiKey ? btoa(unescape(encodeURIComponent(awsConfig.lambdaApiKey))) : "",
+        use_lambda_proxy: awsConfig.useLambdaProxy,
+        textbooks_folder_id: googleConfig.textbooksFolderId,
+        exam_questions_folder_id: googleConfig.examQuestionsFolderId,
+        exam_answers_folder_id: googleConfig.examAnswersFolderId,
       };
 
       await fetch("/api/v1/user/credentials", {
@@ -330,8 +342,9 @@ export default function AdminProfilePage() {
                 value={awsConfig.lambdaUrl}
                 onChange={(e) => setAwsConfig({ ...awsConfig, lambdaUrl: e.target.value })}
                 className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                disabled={!awsConfig.useLambdaProxy}
               />
-              <p className="text-xs text-gray-400 mt-1">If set, video moderation will use this Lambda instead of Bedrock directly</p>
+              <p className="text-xs text-gray-400 mt-1">Only used when the opt-in checkbox below is enabled</p>
             </div>
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1 flex items-center gap-1">
@@ -344,9 +357,22 @@ export default function AdminProfilePage() {
                 value={awsConfig.lambdaApiKey}
                 onChange={(e) => setAwsConfig({ ...awsConfig, lambdaApiKey: e.target.value })}
                 className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                disabled={!awsConfig.useLambdaProxy}
               />
               <p className="text-xs text-gray-400 mt-1">Sent as x-api-key header (optional)</p>
             </div>
+          </div>
+          <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
+            <input
+              type="checkbox"
+              id="useLambdaProxy"
+              checked={awsConfig.useLambdaProxy}
+              onChange={(e) => setAwsConfig({ ...awsConfig, useLambdaProxy: e.target.checked })}
+              className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+            />
+            <label htmlFor="useLambdaProxy" className="text-sm font-medium text-gray-700">
+              Use Lambda proxy for video moderation (instead of direct Bedrock)
+            </label>
           </div>
         </div>
 
@@ -423,6 +449,40 @@ export default function AdminProfilePage() {
                 className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               />
               <p className="text-xs text-gray-400 mt-1">{t('folder_shared_help')}</p>
+            </div>
+          </div>
+
+          {/* Per-subfolder Drive IDs (Requirement 4.2, 4.7) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100">
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">Textbooks Folder ID</label>
+              <input
+                type="text"
+                placeholder="Optional — overrides subfolder lookup"
+                value={googleConfig.textbooksFolderId}
+                onChange={(e) => setGoogleConfig({ ...googleConfig, textbooksFolderId: e.target.value })}
+                className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">Exam Questions Folder ID</label>
+              <input
+                type="text"
+                placeholder="Optional — overrides subfolder lookup"
+                value={googleConfig.examQuestionsFolderId}
+                onChange={(e) => setGoogleConfig({ ...googleConfig, examQuestionsFolderId: e.target.value })}
+                className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">Exam Answers Folder ID</label>
+              <input
+                type="text"
+                placeholder="Optional — overrides subfolder lookup"
+                value={googleConfig.examAnswersFolderId}
+                onChange={(e) => setGoogleConfig({ ...googleConfig, examAnswersFolderId: e.target.value })}
+                className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
             </div>
           </div>
         </div>

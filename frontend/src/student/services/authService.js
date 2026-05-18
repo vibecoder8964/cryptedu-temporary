@@ -4,6 +4,8 @@
 // NO AWS Amplify — admin uses Cognito separately in App.tsx
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { invalidateLocalStateCache } from './endUserStateService';
+
 const SESSION_KEY = 'cryptedu_student_session';
 
 // ── Session helpers ─────────────────────────────────────────────────────────
@@ -23,11 +25,19 @@ const clearSession = () => localStorage.removeItem(SESSION_KEY);
 /**
  * Login end-user via backend endpoint.
  * Default seeded user: roshi / 012345
+ *
+ * On a successful login the persisted ``cryptedu-state`` localStorage
+ * cache is invalidated so a freshly authenticated end user does not
+ * inherit the previously-signed-in account's progress / quiz results
+ * / chat history from the same browser (Requirement 1.8 isolation).
+ * The canonical record lives server-side; ``loadUserData`` rehydrates
+ * the store from the backend right after this resolves.
  */
 export const loginUser = async (username, password) => {
   const res = await fetch('/api/end-users/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ username, password }),
   });
 
@@ -43,6 +53,12 @@ export const loginUser = async (username, password) => {
     role: data.user.role || 'student',
   };
   setSession(session);
+
+  // Drop the persisted store mirror left over from any previous
+  // session on this browser before the route guard rehydrates from
+  // the backend.
+  invalidateLocalStateCache();
+
   return { isSignedIn: true, user: session };
 };
 
@@ -69,10 +85,12 @@ export const getCurrentUser = async () => {
 };
 
 /**
- * Logout — clear localStorage session.
+ * Logout — clear localStorage session and the persisted store mirror
+ * so the next user signing in on this browser starts fresh.
  */
 export const logoutUser = async () => {
   clearSession();
+  invalidateLocalStateCache();
 };
 
 /**

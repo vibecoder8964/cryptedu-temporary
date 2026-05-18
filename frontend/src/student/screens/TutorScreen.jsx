@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, ChevronDown, ChevronUp } from 'lucide-react';
 import useAppStore from '../store/appStore';
 import { askTutor, gradeEssay } from '../services/aiService';
+import { loadEndUserChat, appendEndUserChat } from '../services/endUserStateService';
 import LoadingDots from '../components/LoadingDots';
 
 const CHIPS = [
@@ -30,6 +31,46 @@ export default function TutorScreen() {
   const bottomRef = useRef(null);
   const inputRef  = useRef(null);
 
+  // The chat is scoped per video (currentLesson.id doubles as the
+  // ``video_key`` everywhere else in the End_User_App). When the
+  // screen mounts (or the active lesson changes) the persisted chat
+  // turns for ``(end_user_id, video_key)`` are loaded from
+  // ``GET /api/end-users/chat``; on a fresh login this is the path
+  // that brings in history written from another browser
+  // (Requirement 1.10 cross-device sync).
+  useEffect(() => {
+    let cancelled = false;
+    const videoKey = currentLesson?.id;
+    if (!videoKey) return;
+    (async () => {
+      try {
+        const messages = await loadEndUserChat(videoKey);
+        if (cancelled) return;
+        // Replace the in-memory history with the server's view rather
+        // than appending — the server is the canonical record. The
+        // map shape lines up with the existing tutorHistory entries
+        // ({role, text, timestamp}) so the rest of the screen does
+        // not need to know about the persistence layer.
+        clearTutorHistory();
+        for (const m of messages) {
+          addTutorMessage({
+            role: m.role,
+            text: m.text,
+          });
+        }
+      } catch (e) {
+        // 401 just means the end user is on the legacy session path;
+        // any other error is logged and the screen carries on with
+        // the in-memory store.
+        if (!e || (e.status !== 401 && e.status !== 403)) {
+          console.warn('Tutor chat history load failed', e);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentLesson?.id]);
+
   const messages = tutorHistory.length > 0 ? tutorHistory : [WELCOME];
 
   // Scroll to bottom on new message
@@ -43,6 +84,19 @@ export default function TutorScreen() {
     setInput('');
 
     addTutorMessage({ role: 'student', text: msg });
+    // Persist the student turn server-side. Fire-and-forget: if the
+    // user is on the legacy session path (no backend cookie) the
+    // 401 is swallowed; any other failure is logged but does not
+    // block the chat — the in-memory store keeps the conversation
+    // alive for the active session.
+    const videoKey = currentLesson?.id;
+    if (videoKey) {
+      appendEndUserChat(videoKey, 'student', msg).catch((e) => {
+        if (!e || (e.status !== 401 && e.status !== 403)) {
+          console.warn('Tutor chat student-turn persist failed', e);
+        }
+      });
+    }
     setLoading(true);
 
     let response = '';
@@ -70,6 +124,13 @@ export default function TutorScreen() {
     }
 
     addTutorMessage({ role: 'tutor', text: response });
+    if (videoKey) {
+      appendEndUserChat(videoKey, 'tutor', response).catch((e) => {
+        if (!e || (e.status !== 401 && e.status !== 403)) {
+          console.warn('Tutor chat tutor-turn persist failed', e);
+        }
+      });
+    }
     setLoading(false);
     inputRef.current?.focus();
   };
